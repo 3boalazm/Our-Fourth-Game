@@ -109,3 +109,4 @@ InitTestScene*.unity*
 /Preview/
 /relay/node_modules/
 /relay/.wrangler/
+/.vscode/
