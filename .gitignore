@@ -110,3 +110,4 @@ InitTestScene*.unity*
 /relay/node_modules/
 /relay/.wrangler/
 /.vscode/
+/Assets/Resources/PerformanceTestRun*
