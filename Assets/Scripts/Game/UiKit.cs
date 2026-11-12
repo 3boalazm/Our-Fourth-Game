@@ -157,14 +157,17 @@ public sealed class TextPill : MonoBehaviour
     public Vector2 pad = new Vector2(32f, 12f);
     string last;
     bool lastOn;
+    Vector2 lastSize;
 
     void LateUpdate()
     {
         bool on = text != null && text.gameObject.activeInHierarchy && !string.IsNullOrEmpty(text.text);
         if (bg.enabled != on) bg.enabled = on;
         if (!on) { lastOn = false; return; }
-        if (lastOn && text.text == last) return;
+        Vector2 now = text.rectTransform.rect.size;
+        if (lastOn && text.text == last && now == lastSize) return;
         last = text.text;
+        lastSize = now;
         lastOn = true;
         var trt = text.rectTransform;
         Vector2 box = trt.rect.size;

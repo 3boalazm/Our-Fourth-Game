@@ -9,13 +9,9 @@ using UnityEngine;
 /// </summary>
 public sealed class ArenaView
 {
-    public static readonly Color[] Colors =
-    {
-        new Color(0.36f, 0.86f, 0.30f), // green
-        new Color(1.00f, 0.36f, 0.66f), // pink
-        new Color(0.20f, 0.62f, 1.00f), // blue
-        new Color(1.00f, 0.78f, 0.12f), // yellow
-    };
+    // The colour of each seat (land, tail, character). Changed with SetLook before a match.
+    public static readonly Color[] Colors = { Looks.Palette[0], Looks.Palette[1], Looks.Palette[2], Looks.Palette[3] };
+    readonly int[] shapes = new int[Arena.MaxPlayers];
     public static readonly Color Night = new Color(0.20f, 0.44f, 0.95f);
     static readonly Color SkyTop = new Color(0.42f, 0.80f, 1.00f);
     static readonly Color SkyBottom = new Color(0.42f, 0.34f, 0.96f);
@@ -52,6 +48,8 @@ public sealed class ArenaView
     {
         public Transform root;
         public SpriteRenderer head, side, glow, shine, eyeL, eyeR, pupilL, pupilR, rimL, rimR, sparkL, sparkR, crestA, crestB, crown, tag;
+        public SpriteRenderer decal, stem, beak, stick;
+        public int shape;
         public Transform cube;
         public int lastDir;
         public float squash;
@@ -158,7 +156,21 @@ public sealed class ArenaView
         v.head = MakeSprite("Top", cubeSprite, 20, null, v.cube);
         v.head.color = Color.Lerp(c, Color.white, 0.2f);
         v.head.transform.localScale = Vector3.one * HeadSize;
-        v.shine = MakeSprite("Shine", soft, 21, null, v.cube);
+        v.decal = MakeSprite("Decal", null, 21, null, v.cube);
+        v.decal.transform.localScale = Vector3.one * HeadSize;
+        v.stem = MakeSprite("Stem", pillSprite, 23, null, v.cube);
+        v.stem.drawMode = SpriteDrawMode.Sliced;
+        v.stem.size = new Vector2(0.2f, 0.36f);
+        v.stem.color = Looks.Stem;
+        v.beak = MakeSprite("Beak", pillSprite, 26, null, v.cube);
+        v.beak.drawMode = SpriteDrawMode.Sliced;
+        v.beak.size = new Vector2(0.34f, 0.17f);
+        v.beak.color = Looks.Beak;
+        v.stick = MakeSprite("Stick", pillSprite, 16, null, v.cube);
+        v.stick.drawMode = SpriteDrawMode.Sliced;
+        v.stick.size = new Vector2(0.22f, 0.7f);
+        v.stick.color = Looks.Stick;
+        v.shine = MakeSprite("Shine", soft, 22, null, v.cube);
         v.shine.color = new Color(1f, 1f, 1f, 0.6f);
         v.shine.transform.localScale = new Vector3(0.62f, 0.36f, 1f);
         v.shine.transform.localPosition = new Vector3(-0.27f, 0.33f, 0f);
@@ -205,8 +217,42 @@ public sealed class ArenaView
         v.tag.transform.localPosition = new Vector3(0f, 1.9f, 0f);
         v.blinkAt = Random.Range(1f, 4f);
         v.lastDir = -1;
+        ApplyLook(v, id, id);
         v.root.gameObject.SetActive(false);
         return v;
+    }
+
+    /// <summary>Gives seat seat a colour (index into Looks.Palette) and a shape.</summary>
+    public void SetLook(int seat, int color, int shape)
+    {
+        Colors[seat] = Looks.Palette[Mathf.Clamp(color, 0, Looks.ColorCount - 1)];
+        shapes[seat] = Mathf.Clamp(shape, 0, Looks.ShapeCount - 1);
+        ApplyLook(views[seat], seat, shapes[seat]);
+        arenaMat.SetColor("_C" + (seat + 1), Colors[seat]);
+    }
+
+    void ApplyLook(PlayerView v, int seat, int shape)
+    {
+        Color c = Colors[seat];
+        v.shape = shape;
+        var body = Looks.BodySprite(shape);
+        v.side.sprite = body;
+        v.head.sprite = body;
+        v.side.color = Looks.SideColor(shape, c);
+        v.head.color = Looks.TopColor(shape, c);
+        v.decal.sprite = Looks.DecalSprite(shape);
+        v.decal.enabled = v.decal.sprite != null;
+        v.glow.color = new Color(c.r, c.g, c.b, 0.2f);
+        bool crest = shape == (int)Looks.Shape.Cube || shape == (int)Looks.Shape.Chick;
+        v.crestA.enabled = v.crestB.enabled = crest;
+        v.crestA.color = v.crestB.color = shape == (int)Looks.Shape.Chick ? Color.Lerp(c, Color.white, 0.1f) : Color.Lerp(c, Color.black, 0.12f);
+        bool eyes = Looks.HasEyes(shape);
+        foreach (var e in new[] { v.rimL, v.rimR, v.eyeL, v.eyeR, v.pupilL, v.pupilR, v.sparkL, v.sparkR }) e.gameObject.SetActive(eyes);
+        v.rimL.color = v.rimR.color = Color.Lerp(c, Color.black, 0.45f);
+        v.stem.enabled = shape == (int)Looks.Shape.Pumpkin;
+        v.beak.enabled = shape == (int)Looks.Shape.Chick;
+        v.stick.enabled = shape == (int)Looks.Shape.Popsicle;
+        v.shine.enabled = !Looks.IsSlice(shape);
     }
 
     void MakeParticles()
@@ -555,6 +601,24 @@ public sealed class ArenaView
         v.crestB.transform.localPosition = -fwd * 0.26f - side * 0.09f;
         v.crestA.transform.localRotation = Quaternion.Euler(0f, 0f, ang + 18f);
         v.crestB.transform.localRotation = Quaternion.Euler(0f, 0f, ang - 18f);
+
+        // slices (melon, popsicle) turn to point the way they go; the side stays below
+        bool slice = Looks.IsSlice(v.shape);
+        var faceRot = Quaternion.Euler(0f, 0f, slice ? ang : 0f);
+        v.head.transform.localRotation = faceRot;
+        v.side.transform.localRotation = faceRot;
+        v.decal.transform.localRotation = faceRot;
+        if (v.stick.enabled)
+        {
+            v.stick.transform.localPosition = -fwd * 0.72f + new Vector3(0f, -0.1f, 0f);
+            v.stick.transform.localRotation = faceRot;
+        }
+        if (v.stem.enabled)
+        {
+            v.stem.transform.localPosition = new Vector3(0.04f, 0.5f, 0f);
+            v.stem.transform.localRotation = Quaternion.Euler(0f, 0f, -12f);
+        }
+        if (v.beak.enabled) v.beak.transform.localPosition = new Vector3(0f, -0.3f, 0f) + fwd * 0.13f;
 
         // big eyes at the front, looking where it goes; blink now and then
         if (realTime > v.blinkAt)

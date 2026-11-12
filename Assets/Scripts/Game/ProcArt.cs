@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>All the game's pictures are drawn in code (no image files needed).</summary>
@@ -213,6 +214,189 @@ public static class ProcArt
                 float sh = 1f - Smooth(0.03f, 0.11f, (p - new Vector2(-0.1f, 0.12f)).magnitude);
                 c = Color.Lerp(c, Color.white, sh * 0.65f);
                 px[y * size + x] = new Color32((byte)(c.r * 255), (byte)(c.g * 255), (byte)(c.b * 255), (byte)(a * 255));
+            }
+        t.SetPixels32(px);
+        return ToSprite(t, size);
+    }
+
+    // ------------------------------------------------------------ character shapes
+    // All drawn pointing up (+y) in a unit square; the game turns them to face the way they go.
+
+    static readonly Vector2[] Tri = { new Vector2(0.5f, 0.93f), new Vector2(0.9f, 0.16f), new Vector2(0.1f, 0.16f) };
+
+    // Signed distance to a convex polygon (negative inside).
+    static float PolyDist(Vector2 p, Vector2[] v)
+    {
+        float d = Vector2.Dot(p - v[0], p - v[0]);
+        float s = 1f;
+        for (int i = 0, j = v.Length - 1; i < v.Length; j = i, i++)
+        {
+            Vector2 e = v[j] - v[i];
+            Vector2 w = p - v[i];
+            Vector2 b = w - e * Mathf.Clamp01(Vector2.Dot(w, e) / Vector2.Dot(e, e));
+            d = Mathf.Min(d, Vector2.Dot(b, b));
+            bool c1 = p.y >= v[i].y, c2 = p.y < v[j].y, c3 = e.x * w.y > e.y * w.x;
+            if ((c1 && c2 && c3) || (!c1 && !c2 && !c3)) s = -s;
+        }
+        return s * Mathf.Sqrt(d);
+    }
+
+    static float TriDist(Vector2 uv) { return PolyDist(uv, Tri) - 0.06f; }
+
+    /// <summary>A soft rounded triangle (a slice), grey shading for tinting.</summary>
+    public static Sprite Triangle(int size)
+    {
+        var t = NewTex(size, size);
+        var px = new Color32[size * size];
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                var uv = new Vector2((x + 0.5f) / size, (y + 0.5f) / size);
+                float d = TriDist(uv) * size;
+                float a = Mathf.Clamp01(0.5f - d);
+                float inside = Mathf.Clamp01(-d / (size * 0.12f));
+                float lit = Mathf.Clamp01(0.5f + (-(uv.x - 0.5f) * 0.55f + (uv.y - 0.5f) * 0.75f));
+                float shade = Mathf.Lerp(0.84f, 1f, lit) * Mathf.Lerp(0.8f, 1f, Smooth(0f, 0.5f, inside));
+                shade += 0.06f * Smooth(0.25f, 0.6f, inside) * (1f - Smooth(0.6f, 1f, inside));
+                byte g = (byte)(Mathf.Clamp01(shade) * 255);
+                px[y * size + x] = new Color32(g, g, g, (byte)(a * 255));
+            }
+        t.SetPixels32(px);
+        return ToSprite(t, size);
+    }
+
+    static Color32 C32(Color c, float a) { return new Color32((byte)(c.r * 255), (byte)(c.g * 255), (byte)(c.b * 255), (byte)(Mathf.Clamp01(a) * 255)); }
+
+    /// <summary>Watermelon slice details: green rind at the back, a pale line and seeds.</summary>
+    public static Sprite MelonDecal(int size)
+    {
+        var t = NewTex(size, size);
+        var px = new Color32[size * size];
+        var rind = new Color(0.32f, 0.78f, 0.26f);
+        var rindDark = new Color(0.2f, 0.55f, 0.16f);
+        var pale = new Color(0.95f, 1f, 0.85f);
+        var seed = new Color(0.12f, 0.08f, 0.1f);
+        Vector2[] seeds = { new Vector2(0.38f, 0.42f), new Vector2(0.62f, 0.42f), new Vector2(0.5f, 0.55f), new Vector2(0.42f, 0.66f), new Vector2(0.58f, 0.66f), new Vector2(0.5f, 0.77f) };
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                var uv = new Vector2((x + 0.5f) / size, (y + 0.5f) / size);
+                float d = TriDist(uv);
+                float inA = Mathf.Clamp01(0.5f - d * size);
+                Color c = Color.clear;
+                float a = 0f;
+                float fromBase = uv.y - 0.1f; // the back edge is the base of the triangle
+                if (fromBase < 0.13f) { c = Color.Lerp(rindDark, rind, Smooth(0f, 0.1f, fromBase)); a = 1f; }
+                else if (fromBase < 0.17f) { c = pale; a = 1f; }
+                foreach (var s in seeds)
+                {
+                    var q = uv - s;
+                    float e = (q.x * q.x) / (0.028f * 0.028f) + (q.y * q.y) / (0.045f * 0.045f);
+                    if (e < 1f) { c = seed; a = 1f; }
+                }
+                px[y * size + x] = C32(c, a * inA);
+            }
+        t.SetPixels32(px);
+        return ToSprite(t, size);
+    }
+
+    /// <summary>Popsicle details: light stripes across the slice.</summary>
+    public static Sprite PopsicleDecal(int size)
+    {
+        var t = NewTex(size, size);
+        var px = new Color32[size * size];
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                var uv = new Vector2((x + 0.5f) / size, (y + 0.5f) / size);
+                float inA = Mathf.Clamp01(0.5f - TriDist(uv) * size);
+                float band = 0f;
+                if (uv.y > 0.36f && uv.y < 0.47f) band = 0.42f;
+                else if (uv.y > 0.6f && uv.y < 0.69f) band = 0.3f;
+                // and a darker one near the back
+                Color c = Color.white;
+                if (uv.y < 0.27f) { c = new Color(0f, 0f, 0.1f); band = 0.16f; }
+                px[y * size + x] = C32(c, band * inA);
+            }
+        t.SetPixels32(px);
+        return ToSprite(t, size);
+    }
+
+    /// <summary>Cake sprinkles on top of a rounded square (keeps the eyes area clear).</summary>
+    public static Sprite Sprinkles(int size)
+    {
+        var t = NewTex(size, size);
+        var px = new Color32[size * size];
+        Color[] cols = { Color.white, new Color(1f, 0.85f, 0.2f), new Color(0.3f, 0.85f, 1f), new Color(0.5f, 0.95f, 0.4f), new Color(1f, 0.55f, 0.2f), new Color(0.75f, 0.5f, 1f) };
+        var rng = new System.Random(5);
+        var bits = new List<Vector4>(); // x, y, angle, colour
+        while (bits.Count < 16)
+        {
+            float u = 0.2f + (float)rng.NextDouble() * 0.6f, v = 0.2f + (float)rng.NextDouble() * 0.6f;
+            if (v > 0.3f && v < 0.56f && u > 0.22f && u < 0.78f) continue; // eyes
+            bool near = false;
+            foreach (var b in bits) if (Vector2.Distance(new Vector2(b.x, b.y), new Vector2(u, v)) < 0.1f) near = true;
+            if (near) continue;
+            bits.Add(new Vector4(u, v, (float)rng.NextDouble() * Mathf.PI, rng.Next(cols.Length)));
+        }
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                var uv = new Vector2((x + 0.5f) / size, (y + 0.5f) / size);
+                Color c = Color.clear;
+                float a = 0f;
+                foreach (var b in bits)
+                {
+                    var q = uv - new Vector2(b.x, b.y);
+                    float cs = Mathf.Cos(b.z), sn = Mathf.Sin(b.z);
+                    var r = new Vector2(cs * q.x + sn * q.y, -sn * q.x + cs * q.y);
+                    // a capsule 0.07 long, 0.018 thick
+                    r.x = Mathf.Max(Mathf.Abs(r.x) - 0.035f, 0f);
+                    float dist = r.magnitude - 0.018f;
+                    float k = Mathf.Clamp01(0.5f - dist * size);
+                    if (k > a) { a = k; c = cols[(int)b.w]; }
+                }
+                px[y * size + x] = C32(c, a);
+            }
+        t.SetPixels32(px);
+        return ToSprite(t, size);
+    }
+
+    /// <summary>A carved pumpkin face (glowing eyes and grin) with faint ribs.</summary>
+    public static Sprite PumpkinFace(int size)
+    {
+        var t = NewTex(size, size);
+        var px = new Color32[size * size];
+        var dark = new Color(0.32f, 0.1f, 0.02f);
+        var glow = new Color(1f, 0.86f, 0.3f);
+        Vector2[] eyeL = { new Vector2(0.27f, 0.47f), new Vector2(0.43f, 0.47f), new Vector2(0.35f, 0.6f) };
+        Vector2[] eyeR = { new Vector2(0.57f, 0.47f), new Vector2(0.73f, 0.47f), new Vector2(0.65f, 0.6f) };
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                var uv = new Vector2((x + 0.5f) / size, (y + 0.5f) / size);
+                // ribs
+                float rib = 0f;
+                foreach (float rx in new[] { 0.3f, 0.5f, 0.7f })
+                    rib = Mathf.Max(rib, 1f - Smooth(0f, 0.035f, Mathf.Abs(uv.x - rx)));
+                rib *= Smooth(0.08f, 0.2f, uv.y) * (1f - Smooth(0.8f, 0.92f, uv.y)) * 0.16f;
+                Color c = new Color(0.3f, 0.08f, 0f);
+                float a = rib;
+                // face
+                float de = Mathf.Min(PolyDist(uv, eyeL), PolyDist(uv, eyeR)) - 0.012f;
+                var m = uv - new Vector2(0.5f, 0.34f);
+                float smile = Mathf.Max(m.x * m.x / (0.25f * 0.25f) + m.y * m.y / (0.13f * 0.13f) - 1f,
+                                         -((m.x * m.x) / (0.29f * 0.29f) + (m.y - 0.09f) * (m.y - 0.09f) / (0.12f * 0.12f) - 1f));
+                // two teeth
+                bool tooth = (Mathf.Abs(uv.x - 0.42f) < 0.03f || Mathf.Abs(uv.x - 0.58f) < 0.03f) && uv.y > 0.27f;
+                bool inFace = de < 0f || (smile < 0f && !tooth);
+                if (inFace)
+                {
+                    float center = de < 0f ? Smooth(0f, 0.04f, -de) : Smooth(0f, 0.3f, -smile);
+                    c = Color.Lerp(dark, glow, center * 0.8f);
+                    a = 1f;
+                }
+                px[y * size + x] = C32(c, a);
             }
         t.SetPixels32(px);
         return ToSprite(t, size);

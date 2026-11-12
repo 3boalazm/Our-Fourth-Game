@@ -145,6 +145,9 @@ public static class FourthBuild
         {
             int size = n <= 2 ? 40 : 52;
             var a = new Arena(size, size, 7 + n);
+            int[] shapes = n == 4 ? new[] { 1, 4, 5, 3 } : new[] { 2, 0 };
+            int[] colors = n == 4 ? new[] { 3, 6, 7, 4 } : new[] { 1, 5 };
+            for (int i = 0; i < n; i++) view.SetLook(i, colors[i], shapes[i]);
             for (int i = 0; i < n; i++)
             {
                 int x, y;

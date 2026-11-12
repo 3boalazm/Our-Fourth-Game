@@ -21,7 +21,7 @@ public sealed class OurFourthGame : MonoBehaviour
     public Material glowMaterial;
     public Material lineMaterial;
 
-    enum State { Name, Menu, Solo, Join, Lobby, Playing, Results }
+    enum State { Name, Menu, Look, Solo, Join, Lobby, Playing, Results }
 
     static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     static readonly float[] Lengths = { 90f, 120f, 180f };
@@ -40,6 +40,7 @@ public sealed class OurFourthGame : MonoBehaviour
 
     // settings
     string myName = "";
+    int myShape, myColor;
     int soloBots = 2;
     int lengthIndex = 1;
     bool muted;
@@ -54,7 +55,7 @@ public sealed class OurFourthGame : MonoBehaviour
     float leftAt; // when the clock ran out on a guest (waiting for the host's result)
 
     // seats (online lobby and match)
-    sealed class Seat { public bool used, bot, connected; public string name = ""; }
+    sealed class Seat { public bool used, bot, connected; public string name = ""; public int shape, color; }
     readonly Seat[] seats = { new Seat(), new Seat(), new Seat(), new Seat() };
 
     // online
@@ -74,7 +75,7 @@ public sealed class OurFourthGame : MonoBehaviour
 
     // UI
     Canvas canvas;
-    RectTransform namePanel, menuPanel, soloPanel, joinPanel, lobbyPanel, hudPanel, countPanel, resultPanel, howPanel;
+    RectTransform namePanel, menuPanel, lookPanel, lookPreview, menuIcon, soloPanel, joinPanel, lobbyPanel, hudPanel, countPanel, resultPanel, howPanel;
     TextMeshProUGUI toast, nameShown, menuWho, joinCodeText, joinStatus, lobbyTitle, lobbyInfo, lobbyLink, lobbyStatus;
     TextMeshProUGUI countText, timerText, myShareText, resultTitle, resultSub, hintText;
     readonly TextMeshProUGUI[] seatLabels = new TextMeshProUGUI[4];
@@ -91,6 +92,14 @@ public sealed class OurFourthGame : MonoBehaviour
     readonly List<Image> botChips = new List<Image>();
     readonly List<Image> lengthChipsSolo = new List<Image>();
     readonly List<Image> lengthChipsLobby = new List<Image>();
+    readonly List<Image> shapeChips = new List<Image>();
+    readonly List<RectTransform> colorRings = new List<RectTransform>();
+    TextMeshProUGUI lookName, lookTitle;
+    RectTransform lookCard, lookDone;
+    readonly List<RectTransform> shapeRects = new List<RectTransform>();
+    readonly List<RectTransform> colorRects = new List<RectTransform>();
+    int lookLayout = -1, menuLayout = -1;
+    TextMeshProUGUI menuTitle, menuTip;
     float toastUntil;
     Sprite disc, crown;
     float nextReport;
@@ -127,6 +136,9 @@ public sealed class OurFourthGame : MonoBehaviour
         int li;
         if (int.TryParse(Net.GetStored("length"), out li)) lengthIndex = Mathf.Clamp(li, 0, Lengths.Length - 1);
         muted = Net.GetStored("muted") == "1";
+        int ms, mc;
+        myShape = int.TryParse(Net.GetStored("shape"), out ms) ? Mathf.Clamp(ms, 0, Looks.ShapeCount - 1) : 0;
+        myColor = int.TryParse(Net.GetStored("color"), out mc) ? Mathf.Clamp(mc, 0, Looks.ColorCount - 1) : Random.Range(0, Looks.ColorCount);
         sfx.SetMuted(muted);
 
         BuildUi();
@@ -166,6 +178,9 @@ public sealed class OurFourthGame : MonoBehaviour
         demo = true;
         inMatch = false;
         var a = new Arena(44, 44, Random.Range(1, 99999));
+        var demoColors = new List<int>();
+        for (int k = 0; k < Looks.ColorCount; k++) demoColors.Insert(Random.Range(0, demoColors.Count + 1), k);
+        for (int i = 0; i < 4; i++) view.SetLook(i, demoColors[i], Random.Range(0, Looks.ShapeCount));
         for (int i = 0; i < 4; i++)
         {
             int x, y;
@@ -217,6 +232,7 @@ public sealed class OurFourthGame : MonoBehaviour
         countPanel = UiKit.Fill(ct, "Countdown");
         namePanel = UiKit.Fill(ct, "Name");
         menuPanel = UiKit.Fill(ct, "Menu");
+        lookPanel = UiKit.Fill(ct, "Look");
         soloPanel = UiKit.Fill(ct, "Solo");
         joinPanel = UiKit.Fill(ct, "Join");
         lobbyPanel = UiKit.Fill(ct, "Lobby");
@@ -225,6 +241,7 @@ public sealed class OurFourthGame : MonoBehaviour
 
         BuildName();
         BuildMenu();
+        BuildLook();
         BuildSolo();
         BuildJoin();
         BuildLobby();
@@ -284,20 +301,147 @@ public sealed class OurFourthGame : MonoBehaviour
 
     void BuildMenu()
     {
-        var menuTitle = UiKit.Text(menuPanel, Title(), 110, Color.white, new Vector2(0, -110), new Vector2(1000, 140), TextAlignmentOptions.Center, new Vector2(0.5f, 1f), true, true);
+        menuTitle = UiKit.Text(menuPanel, Title(), 110, Color.white, new Vector2(0, -110), new Vector2(1000, 140), TextAlignmentOptions.Center, new Vector2(0.5f, 1f), true, true);
         UiKit.Pill(menuTitle, new Color(0.1f, 0.11f, 0.28f, 0.9f), new Vector2(80f, 10f));
-        var menuTip = UiKit.Text(menuPanel, "Swipe to move  -  leave your land  -  come back to take everything inside", 26, Color.white,
+        menuTip = UiKit.Text(menuPanel, "Swipe to move  -  leave your land  -  come back to take everything inside", 26, Color.white,
             new Vector2(0, -200), new Vector2(1100, 40), TextAlignmentOptions.Center, new Vector2(0.5f, 1f));
         UiKit.Pill(menuTip, new Color(0.1f, 0.11f, 0.28f, 0.7f), new Vector2(40f, 12f));
         var card = Card(menuPanel, new Vector2(560, 430), new Vector2(0, -40));
         UiKit.Button(card, "Play vs Bots", Green, new Vector2(0, 140), new Vector2(460, 90), () => SetState(State.Solo), 40);
         UiKit.Button(card, "Create a Room", Pink, new Vector2(0, 38), new Vector2(460, 90), StartHosting, 40);
         UiKit.Button(card, "Join a Room", Blue, new Vector2(0, -64), new Vector2(460, 90), GoJoin, 40);
-        UiKit.Button(card, "How to play", Grey, new Vector2(0, -160), new Vector2(300, 64), () => howPanel.gameObject.SetActive(true), 28);
+        UiKit.Button(card, "How to play", Grey, new Vector2(-118, -160), new Vector2(212, 64), () => howPanel.gameObject.SetActive(true), 28);
+        var lookBtn = UiKit.Button(card, "     My look", Orange, new Vector2(118, -160), new Vector2(212, 64), () => SetState(State.Look), 28);
+        menuIcon = UiKit.Fill(lookBtn.transform, "Icon");
+        menuIcon.anchorMin = menuIcon.anchorMax = new Vector2(0f, 0.5f);
+        menuIcon.sizeDelta = new Vector2(56, 56);
+        menuIcon.anchoredPosition = new Vector2(38, 2);
+        Looks.BuildIcon(menuIcon, myShape, myColor, 52);
         var who = UiKit.Button(menuPanel, "", new Color(0.2f, 0.23f, 0.42f, 0.9f), new Vector2(0, 60), new Vector2(520, 64),
             () => SetState(State.Name), 28, new Vector2(0.5f, 0f));
         menuWho = who.GetComponentInChildren<TextMeshProUGUI>();
         RefreshName();
+    }
+
+    // ------------------------------------------------------------ picking a look
+
+    void BuildLook()
+    {
+        var card = Card(lookPanel, new Vector2(980, 660), Vector2.zero);
+        lookCard = card;
+        lookTitle = UiKit.Text(card, "Pick your look", 52, Color.white, new Vector2(0, 280), new Vector2(800, 64), TextAlignmentOptions.Center, null, true, true);
+        lookPreview = UiKit.Fill(card, "Preview");
+        lookPreview.anchorMin = lookPreview.anchorMax = new Vector2(0.5f, 0.5f);
+        lookPreview.sizeDelta = new Vector2(170, 170);
+        lookPreview.anchoredPosition = new Vector2(0, 150);
+        lookName = UiKit.Text(card, "", 30, UiKit.Soft, new Vector2(0, 50), new Vector2(600, 40));
+        for (int i = 0; i < Looks.ShapeCount; i++)
+        {
+            int k = i;
+            var b = UiKit.Button(card, "", Grey, new Vector2(-375 + i * 150, -50), new Vector2(130, 130), () => { myShape = k; SaveLook(); }, 20);
+            shapeChips.Add((Image)b.targetGraphic);
+            shapeRects.Add((RectTransform)b.transform);
+            var holder = UiKit.Fill(b.transform, "Icon");
+            Looks.BuildIcon(holder, i, myColor, 104);
+        }
+        for (int i = 0; i < Looks.ColorCount; i++)
+        {
+            int k = i;
+            float x = -350 + i * 100;
+            var ring = UiKit.Box(card, Color.white, new Vector2(x, -180), new Vector2(84, 84));
+            ring.sprite = disc;
+            ring.type = Image.Type.Simple;
+            colorRings.Add(ring.rectTransform);
+            var b = UiKit.Button(card, "", Looks.Palette[i], new Vector2(x, -180), new Vector2(68, 68), () => { myColor = k; SaveLook(); }, 20);
+            ((Image)b.targetGraphic).sprite = disc;
+            ((Image)b.targetGraphic).type = Image.Type.Simple;
+            colorRects.Add((RectTransform)b.transform);
+        }
+        lookDone = (RectTransform)UiKit.Button(card, "Done", Green, new Vector2(0, -275), new Vector2(300, 76), () => SetState(State.Menu), 36).transform;
+        LayoutLook();
+    }
+
+    void LayoutMenu()
+    {
+        int tall = Screen.height > Screen.width ? 1 : 0;
+        if (tall == menuLayout || menuTitle == null) return;
+        menuLayout = tall;
+        menuTitle.rectTransform.sizeDelta = tall == 1 ? new Vector2(590, 120) : new Vector2(1000, 140);
+        menuTip.rectTransform.sizeDelta = tall == 1 ? new Vector2(560, 76) : new Vector2(1100, 40);
+        menuTip.rectTransform.anchoredPosition = new Vector2(0, tall == 1 ? -212 : -200);
+        menuTip.enableWordWrapping = tall == 1;
+    }
+
+    // Wide screens: one row of shapes and one of colours. Tall (portrait) phones: 3 + 3 and 4 + 4.
+    void LayoutLook()
+    {
+        if (lookCard == null) return;
+        int tall = Screen.height > Screen.width ? 1 : 0;
+        if (tall == lookLayout) return;
+        lookLayout = tall;
+        if (tall == 0)
+        {
+            lookCard.sizeDelta = new Vector2(980, 660);
+            lookTitle.rectTransform.anchoredPosition = new Vector2(0, 280);
+            lookPreview.anchoredPosition = new Vector2(0, 150);
+            lookName.rectTransform.anchoredPosition = new Vector2(0, 50);
+            for (int i = 0; i < shapeRects.Count; i++) shapeRects[i].anchoredPosition = new Vector2(-375 + i * 150, -50);
+            for (int i = 0; i < colorRects.Count; i++) colorRects[i].anchoredPosition = colorRings[i].anchoredPosition = new Vector2(-350 + i * 100, -180);
+            lookDone.anchoredPosition = new Vector2(0, -275);
+        }
+        else
+        {
+            lookCard.sizeDelta = new Vector2(600, 1000);
+            lookTitle.rectTransform.anchoredPosition = new Vector2(0, 430);
+            lookPreview.anchoredPosition = new Vector2(0, 300);
+            lookName.rectTransform.anchoredPosition = new Vector2(0, 195);
+            for (int i = 0; i < shapeRects.Count; i++) shapeRects[i].anchoredPosition = new Vector2(-170 + (i % 3) * 170, 80 - (i / 3) * 150);
+            for (int i = 0; i < colorRects.Count; i++) colorRects[i].anchoredPosition = colorRings[i].anchoredPosition = new Vector2(-195 + (i % 4) * 130, -205 - (i / 4) * 105);
+            lookDone.anchoredPosition = new Vector2(0, -420);
+        }
+    }
+
+    void SaveLook()
+    {
+        Net.SetStored("shape", myShape.ToString(Inv));
+        Net.SetStored("color", myColor.ToString(Inv));
+        sfx.Turn();
+        RefreshLook();
+    }
+
+    void RefreshLook()
+    {
+        if (lookPreview == null) return;
+        LayoutLook();
+        Looks.BuildIcon(lookPreview, myShape, myColor, 160);
+        lookName.text = Looks.ColorNames[myColor] + " " + Looks.ShapeNames[myShape];
+        for (int i = 0; i < shapeChips.Count; i++)
+        {
+            shapeChips[i].color = i == myShape ? Orange : new Color(0.22f, 0.25f, 0.46f);
+            var holder = (RectTransform)shapeChips[i].transform.Find("Icon");
+            if (holder != null) Looks.BuildIcon(holder, i, myColor, 104);
+        }
+        for (int i = 0; i < colorRings.Count; i++) colorRings[i].gameObject.SetActive(i == myColor);
+        if (menuIcon != null) Looks.BuildIcon(menuIcon, myShape, myColor, 52);
+    }
+
+    // A colour nobody else in the seats has (the wanted one if it is free).
+    int FreeColor(int wanted, int seat)
+    {
+        bool Taken(int c)
+        {
+            for (int i = 0; i < 4; i++) if (i != seat && seats[i].used && seats[i].color == c) return true;
+            return false;
+        }
+        if (wanted >= 0 && wanted < Looks.ColorCount && !Taken(wanted)) return wanted;
+        var free = new List<int>();
+        for (int c = 0; c < Looks.ColorCount; c++) if (!Taken(c)) free.Add(c);
+        return free.Count > 0 ? free[Random.Range(0, free.Count)] : 0;
+    }
+
+    void ApplySeatLooks()
+    {
+        for (int i = 0; i < 4; i++) if (seats[i].used) view.SetLook(i, seats[i].color, seats[i].shape);
     }
 
     Image Chip(RectTransform parent, string text, Vector2 pos, Vector2 size, UnityEngine.Events.UnityAction onClick)
@@ -482,6 +626,7 @@ public sealed class OurFourthGame : MonoBehaviour
     {
         state = s;
         namePanel.gameObject.SetActive(s == State.Name);
+        lookPanel.gameObject.SetActive(s == State.Look);
         menuPanel.gameObject.SetActive(s == State.Menu);
         soloPanel.gameObject.SetActive(s == State.Solo);
         joinPanel.gameObject.SetActive(s == State.Join);
@@ -489,7 +634,8 @@ public sealed class OurFourthGame : MonoBehaviour
         hudPanel.gameObject.SetActive(s == State.Playing);
         countPanel.gameObject.SetActive(false);
         resultPanel.gameObject.SetActive(s == State.Results);
-        if (s == State.Menu || s == State.Name || s == State.Solo || s == State.Join || s == State.Lobby)
+        if (s == State.Look) RefreshLook();
+        if (s == State.Menu || s == State.Name || s == State.Look || s == State.Solo || s == State.Join || s == State.Lobby)
         {
             if (!demo) StartDemo();
         }
@@ -530,7 +676,10 @@ public sealed class OurFourthGame : MonoBehaviour
             seats[i].bot = i > 0;
             seats[i].connected = true;
             seats[i].name = i == 0 ? myName : FreeBotName();
+            seats[i].shape = i == 0 ? myShape : Random.Range(0, Looks.ShapeCount);
+            seats[i].color = -1;
         }
+        for (int i = 0; i < 4; i++) if (seats[i].used) seats[i].color = FreeColor(i == 0 ? myColor : -1, i);
         BeginMatch(Random.Range(1, 1000000), Random.Range(1, 1000000), Lengths[lengthIndex]);
     }
 
@@ -561,6 +710,8 @@ public sealed class OurFourthGame : MonoBehaviour
         seats[0].used = true;
         seats[0].connected = true;
         seats[0].name = myName;
+        seats[0].shape = myShape;
+        seats[0].color = myColor;
         helloSent = false;
         Net.Start(true, roomCode);
         SetState(State.Lobby);
@@ -650,6 +801,8 @@ public sealed class OurFourthGame : MonoBehaviour
                 seats[i].bot = true;
                 seats[i].connected = true;
                 seats[i].name = FreeBotName();
+                seats[i].shape = Random.Range(0, Looks.ShapeCount);
+                seats[i].color = FreeColor(-1, i);
                 BroadcastRoster();
                 return;
             }
@@ -698,7 +851,7 @@ public sealed class OurFourthGame : MonoBehaviour
                 else if (i == 0) tag = "  <size=75%><color=#9aa3c8>(host)</color></size>";
             }
             seatLabels[i].text = s.used ? (s.name == "" ? "Joining..." : s.name) + tag : "<color=#6c7396>waiting for a friend...</color>";
-            seatDots[i].color = s.used ? ArenaView.Colors[i] : new Color(0.3f, 0.32f, 0.45f);
+            seatDots[i].color = s.used ? Looks.Palette[Mathf.Clamp(s.color, 0, Looks.ColorCount - 1)] : new Color(0.3f, 0.32f, 0.45f);
         }
         RefreshChips();
     }
@@ -709,7 +862,7 @@ public sealed class OurFourthGame : MonoBehaviour
     {
         var parts = new string[4];
         for (int i = 0; i < 4; i++)
-            parts[i] = seats[i].used ? (seats[i].bot ? "b:" : "h:") + seats[i].name : "";
+            parts[i] = seats[i].used ? (seats[i].bot ? "b:" : "h:") + seats[i].shape.ToString(Inv) + ":" + Mathf.Max(0, seats[i].color).ToString(Inv) + ":" + seats[i].name : "";
         return string.Join(",", parts) + "," + lengthIndex.ToString(Inv);
     }
 
@@ -721,7 +874,12 @@ public sealed class OurFourthGame : MonoBehaviour
             string p = parts[i];
             seats[i].used = p.Length >= 2;
             seats[i].bot = p.StartsWith("b:");
-            seats[i].name = p.Length >= 2 ? p.Substring(2) : "";
+            var bits = p.Length >= 2 ? p.Substring(2).Split(new[] { ':' }, 3) : new string[0];
+            int sh = 0, co = i;
+            if (bits.Length == 3) { int.TryParse(bits[0], out sh); int.TryParse(bits[1], out co); }
+            seats[i].shape = Mathf.Clamp(sh, 0, Looks.ShapeCount - 1);
+            seats[i].color = Mathf.Clamp(co, 0, Looks.ColorCount - 1);
+            seats[i].name = bits.Length == 3 ? bits[2] : (p.Length >= 2 ? p.Substring(2) : "");
             seats[i].connected = seats[i].used;
         }
         int li;
@@ -793,12 +951,14 @@ public sealed class OurFourthGame : MonoBehaviour
             if (!iAmHost)
             {
                 if (state == State.Join) { sfx.Join(); SetState(State.Lobby); }
-                Net.Send("H|" + myName);
+                Net.Send("H|" + myName + "|" + myShape.ToString(Inv) + "|" + myColor.ToString(Inv));
             }
             else
             {
                 seats[0].used = true;
                 seats[0].name = myName;
+                seats[0].shape = myShape;
+                seats[0].color = FreeColor(myColor, 0);
                 BroadcastRoster();
             }
             return;
@@ -815,7 +975,7 @@ public sealed class OurFourthGame : MonoBehaviour
                     string botName = seats[slot].name;
                     seats[slot].used = false;
                     for (int i = 1; i < 4; i++)
-                        if (!seats[i].used && i != slot) { seats[i].used = true; seats[i].bot = true; seats[i].name = botName; break; }
+                        if (!seats[i].used && i != slot) { seats[i].used = true; seats[i].bot = true; seats[i].name = botName; seats[i].shape = seats[slot].shape; seats[i].color = seats[slot].color; break; }
                 }
                 seats[slot].used = true;
                 seats[slot].bot = false;
@@ -886,6 +1046,11 @@ public sealed class OurFourthGame : MonoBehaviour
                     seats[from].connected = true;
                     seats[from].name = Clean(p[1]);
                     if (seats[from].name == "") seats[from].name = "Player " + (from + 1);
+                    int hs = 0, hc = -1;
+                    if (p.Length >= 4) { int.TryParse(p[2], out hs); if (!int.TryParse(p[3], out hc)) hc = -1; }
+                    seats[from].shape = Mathf.Clamp(hs, 0, Looks.ShapeCount - 1);
+                    seats[from].color = -1;
+                    seats[from].color = FreeColor(hc, from);
                     BroadcastRoster();
                 }
                 break;
@@ -1058,6 +1223,8 @@ public sealed class OurFourthGame : MonoBehaviour
             a.AddPlayer(i, seats[i].name, bot, remote, x, y);
             if (remote) a.players[i].respawnAt = float.MaxValue;
         }
+        ApplySeatLooks();
+        for (int i = 0; i < 4; i++) { var o = miniDots[i].GetComponent<Outline>(); if (o != null) o.effectColor = ArenaView.Colors[i]; }
         a.onStep = OnLocalStep;
         a.onRespawn = OnLocalRespawn;
         arena = a;
@@ -1230,6 +1397,8 @@ public sealed class OurFourthGame : MonoBehaviour
         float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
         PumpNet();
         if (toast.gameObject.activeSelf && Time.unscaledTime > toastUntil) toast.gameObject.SetActive(false);
+        if (state == State.Look) LayoutLook();
+        if (state == State.Menu) LayoutMenu();
 
         if (demo)
         {
@@ -1475,6 +1644,7 @@ public sealed class OurFourthGame : MonoBehaviour
         {
             var p = arena.players[i];
             float w = p.active ? width * arena.Share(p) : 0f;
+            barSegments[i].color = ArenaView.Colors[i];
             var rt = barSegments[i].rectTransform;
             rt.anchoredPosition = new Vector2(x, 0f);
             rt.sizeDelta = new Vector2(w, rt.sizeDelta.y);
