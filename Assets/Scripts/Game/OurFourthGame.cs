@@ -93,6 +93,7 @@ public sealed class OurFourthGame : MonoBehaviour
     readonly List<Image> lengthChipsLobby = new List<Image>();
     float toastUntil;
     Sprite disc, crown;
+    float nextReport;
 
     // ============================================================ start-up
 
@@ -1153,6 +1154,50 @@ public sealed class OurFourthGame : MonoBehaviour
         Net.Vibrate(iWon ? 120 : 40);
     }
 
+    // ============================================================ checks from the browser
+    // window.__colorClash holds this status; unityInstance.SendMessage("ColorClash", "Cmd", "...") drives the game.
+
+    string StatusJson()
+    {
+        var sb = new StringBuilder();
+        sb.Append("{\"state\":\"").Append(state).Append("\",\"online\":").Append(online ? "true" : "false");
+        sb.Append(",\"host\":").Append(iAmHost ? "true" : "false").Append(",\"seat\":").Append(mySeat);
+        sb.Append(",\"room\":\"").Append(roomCode).Append("\",\"net\":\"").Append(Net.Current).Append("\"");
+        sb.Append(",\"match\":").Append(matchId).Append(",\"demo\":").Append(demo ? "true" : "false");
+        sb.Append(",\"time\":").Append(arena.time.ToString("0.0", Inv));
+        sb.Append(",\"players\":[");
+        bool first = true;
+        foreach (var p in arena.players)
+        {
+            if (!p.active) continue;
+            if (!first) sb.Append(",");
+            first = false;
+            sb.Append("{\"id\":").Append(p.id).Append(",\"name\":\"").Append(p.name).Append("\",\"owned\":").Append(p.owned)
+              .Append(",\"alive\":").Append(p.alive ? "true" : "false").Append(",\"x\":").Append(p.x).Append(",\"y\":").Append(p.y)
+              .Append(",\"seq\":").Append(p.seq).Append(",\"remote\":").Append(p.remote ? "true" : "false").Append("}");
+        }
+        sb.Append("],\"seats\":[");
+        for (int i = 0; i < 4; i++)
+        {
+            if (i > 0) sb.Append(",");
+            sb.Append("\"").Append(seats[i].used ? (seats[i].bot ? "bot:" : "human:") + seats[i].name : "").Append("\"");
+        }
+        sb.Append("]}");
+        return sb.ToString();
+    }
+
+    public void Cmd(string c)
+    {
+        if (c == "solo") StartSolo();
+        else if (c == "host") StartHosting();
+        else if (c.StartsWith("join:")) { joinCode = c.Substring(5); GoJoin(); TryJoin(); }
+        else if (c == "start") HostStartMatch();
+        else if (c == "bot") ToggleBot();
+        else if (c == "menu") ToMenu();
+        else if (c.StartsWith("name:")) { myName = Clean(c.Substring(5)); Net.SetStored("name", myName); RefreshName(); if (state == State.Name) SetState(State.Menu); }
+        else if (c.StartsWith("turn:") && inMatch) { int d; if (int.TryParse(c.Substring(5), out d)) TurnMe(arena.players[mySeat], d & 3); }
+    }
+
     // ============================================================ main loop
 
     void Update()
@@ -1172,6 +1217,11 @@ public sealed class OurFourthGame : MonoBehaviour
             UpdateMatch(dt);
         }
         int leader = arena.Leader();
+        if (Time.unscaledTime >= nextReport)
+        {
+            nextReport = Time.unscaledTime + 0.5f;
+            Net.Report(StatusJson());
+        }
         view.Render(Time.unscaledTime, dt, leader);
         UpdateCamera(dt);
         if (state == State.Playing) UpdateHud(leader);

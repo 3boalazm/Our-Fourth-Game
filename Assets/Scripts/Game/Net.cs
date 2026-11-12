@@ -22,6 +22,7 @@ public static class Net
     [DllImport("__Internal")] static extern int NB_Share(string text, string url);
     [DllImport("__Internal")] static extern int NB_CopyText(string text);
     [DllImport("__Internal")] static extern void NB_Vibrate(int ms);
+    [DllImport("__Internal")] static extern void NB_Report(string json);
     [DllImport("__Internal")] static extern string NB_GetStored(string key);
     [DllImport("__Internal")] static extern void NB_SetStored(string key, string value);
     [DllImport("__Internal")] static extern void NB_AskName(string current);
@@ -38,6 +39,7 @@ public static class Net
     public static bool Share(string text, string url) { return NB_Share(text, url) == 1; }
     public static bool CopyText(string text) { return NB_CopyText(text) == 1; }
     public static void Vibrate(int ms) { NB_Vibrate(ms); }
+    public static void Report(string json) { NB_Report(json); }
     public static string GetStored(string key) { return NB_GetStored(key); }
     public static void SetStored(string key, string value) { NB_SetStored(key, value); }
     public static void AskName(string current) { NB_AskName(current); }
@@ -62,6 +64,7 @@ public static class Net
     public static bool Share(string text, string url) { return false; }
     public static bool CopyText(string text) { GUIUtility.systemCopyBuffer = text; return true; }
     public static void Vibrate(int ms) { }
+    public static void Report(string json) { }
     public static string GetStored(string key) { return PlayerPrefs.GetString("ocg_" + key, ""); }
     public static void SetStored(string key, string value) { PlayerPrefs.SetString("ocg_" + key, value); PlayerPrefs.Save(); }
     public static void AskName(string current) { askedName = current; }

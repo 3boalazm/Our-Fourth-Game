@@ -228,6 +228,11 @@ var NetBridgePlugin = {
         return 0;
     },
 
+    // The game publishes a small status object (for checks from the browser console).
+    NB_Report: function (jsonPtr) {
+        try { window.__colorClash = JSON.parse(UTF8ToString(jsonPtr)); } catch (e) {}
+    },
+
     NB_Vibrate: function (ms) {
         try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
     },
