@@ -143,6 +143,81 @@ public static class ProcArt
         return ToSprite(t, size);
     }
 
+    /// <summary>
+    /// The top of a soft rounded cube, seen from above (grey shading so it can be tinted):
+    /// lit from the top left, a darker rim and a soft bevel. 1 unit wide.
+    /// </summary>
+    public static Sprite CubeTop(int size, float radius)
+    {
+        var t = NewTex(size, size);
+        var px = new Color32[size * size];
+        float half = size * 0.5f;
+        float rad = radius * size;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float qx = Mathf.Abs(x + 0.5f - half) - (half - 1f - rad);
+                float qy = Mathf.Abs(y + 0.5f - half) - (half - 1f - rad);
+                float d = Mathf.Sqrt(Mathf.Max(qx, 0f) * Mathf.Max(qx, 0f) + Mathf.Max(qy, 0f) * Mathf.Max(qy, 0f))
+                          + Mathf.Min(Mathf.Max(qx, qy), 0f) - rad;
+                float a = Mathf.Clamp01(0.5f - d);
+                float inside = Mathf.Clamp01(-d / (size * 0.16f)); // 0 at the edge, 1 well inside
+                float u = (x + 0.5f) / size - 0.5f, v = (y + 0.5f) / size - 0.5f;
+                float lit = Mathf.Clamp01(0.5f + (-u * 0.55f + v * 0.75f));
+                float shade = Mathf.Lerp(0.84f, 1f, lit);
+                // bevel: darker towards the outline, a little lighter just inside it
+                shade *= Mathf.Lerp(0.8f, 1f, Smooth(0f, 0.5f, inside));
+                shade += 0.06f * Smooth(0.25f, 0.6f, inside) * (1f - Smooth(0.6f, 1f, inside));
+                byte g = (byte)(Mathf.Clamp01(shade) * 255);
+                px[y * size + x] = new Color32(g, g, g, (byte)(a * 255));
+            }
+        t.SetPixels32(px);
+        return ToSprite(t, size);
+    }
+
+    // Signed distance to a 5 pointed star (negative inside); r outer radius, rf inner ratio.
+    static float StarDist(Vector2 p, float r, float rf)
+    {
+        var k1 = new Vector2(0.809016994f, -0.587785252f);
+        var k2 = new Vector2(-k1.x, k1.y);
+        p.x = Mathf.Abs(p.x);
+        p -= 2f * Mathf.Max(Vector2.Dot(k1, p), 0f) * k1;
+        p -= 2f * Mathf.Max(Vector2.Dot(k2, p), 0f) * k2;
+        p.x = Mathf.Abs(p.x);
+        p.y -= r;
+        var ba = rf * new Vector2(-k1.y, k1.x) - new Vector2(0f, 1f);
+        float h = Mathf.Clamp(Vector2.Dot(p, ba) / Vector2.Dot(ba, ba), 0f, r);
+        return (p - ba * h).magnitude * Mathf.Sign(p.y * ba.x - p.x * ba.y);
+    }
+
+    /// <summary>A chunky golden star with a darker outline and a shine. 1 unit wide.</summary>
+    public static Sprite Star(int size)
+    {
+        var t = NewTex(size, size);
+        var px = new Color32[size * size];
+        var gold = new Color(1f, 0.84f, 0.2f);
+        var deep = new Color(1f, 0.6f, 0.05f);
+        var edge = new Color(0.85f, 0.42f, 0.02f);
+        float s = size;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                var p = new Vector2((x + 0.5f) / s - 0.5f, (y + 0.5f) / s - 0.52f);
+                // rounded star: shrink then grow by a radius
+                float d = (StarDist(p, 0.4f, 0.5f) - 0.04f) * s;
+                float a = Mathf.Clamp01(0.5f - d);
+                float inside = Mathf.Clamp01(-d / (s * 0.06f));
+                Color c = Color.Lerp(deep, gold, Mathf.Clamp01(0.55f + p.y * 1.6f - p.x * 0.4f));
+                c = Color.Lerp(edge, c, Smooth(0.15f, 0.6f, inside));
+                // shine on the upper left
+                float sh = 1f - Smooth(0.03f, 0.11f, (p - new Vector2(-0.1f, 0.12f)).magnitude);
+                c = Color.Lerp(c, Color.white, sh * 0.65f);
+                px[y * size + x] = new Color32((byte)(c.r * 255), (byte)(c.g * 255), (byte)(c.b * 255), (byte)(a * 255));
+            }
+        t.SetPixels32(px);
+        return ToSprite(t, size);
+    }
+
     /// <summary>Soft vertical gradient, used behind the menus.</summary>
     public static Sprite Gradient(Color top, Color bottom)
     {

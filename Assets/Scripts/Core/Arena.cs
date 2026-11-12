@@ -42,7 +42,7 @@ public sealed class Player
 
 public struct ArenaEvent
 {
-    public enum Kind { Capture, Death, Respawn }
+    public enum Kind { Capture, Death, Respawn, Star }
     public Kind kind;
     public int player, other, count;
     public float x, y;
@@ -70,6 +70,8 @@ public sealed class Arena
     public Action<Player> onStep;
     public Action<Player> onRespawn;
     readonly Random rng;
+    readonly int starSeed;
+    readonly HashSet<int> starsTaken = new HashSet<int>();
     readonly int[] mark;
     int markGen;
     readonly int[] queue;
@@ -84,6 +86,7 @@ public sealed class Arena
         mark = new int[w * h];
         queue = new int[w * h];
         rng = new Random(seed);
+        starSeed = seed;
         for (int i = 0; i < MaxPlayers; i++) players[i] = new Player { id = i };
         for (int i = 0; i < flash.Length; i++) flash[i] = -100f;
     }
@@ -257,7 +260,69 @@ public sealed class Arena
             trail[c] = me;
             p.trail.Add(c);
         }
+        int star = StarAt(c);
+        if (star >= 0 && p.alive) TakeStar(p, star, nx, ny);
         return true;
+    }
+
+    // ------------------------------------------------------------ stars
+    // Stars come at fixed times and places worked out from the match seed, so every
+    // device in an online match sees the same ones. Grabbing one gives a little round
+    // patch of land around it (cells with a tail on them are left alone).
+
+    public const float StarFirst = 4f, StarEvery = 5f, StarLife = 16f;
+    public const float StarRadius = 2.6f;
+
+    public int StarCell(int k)
+    {
+        uint h = (uint)(starSeed * 73856093) ^ (uint)((k + 1) * 19349663);
+        h ^= h >> 13; h *= 0x5bd1e995; h ^= h >> 15;
+        int m = 4;
+        int x = m + (int)(h % (uint)Math.Max(1, W - 2 * m));
+        int y = m + (int)((h / 977u) % (uint)Math.Max(1, H - 2 * m));
+        return Idx(x, y);
+    }
+
+    public static float StarBorn(int k) { return StarFirst + k * StarEvery; }
+
+    /// <summary>Stars that are out right now (index k), oldest first.</summary>
+    public void LiveStars(List<int> into)
+    {
+        into.Clear();
+        if (time < StarFirst) return;
+        int last = (int)Math.Floor((time - StarFirst) / StarEvery);
+        int first = Math.Max(0, (int)Math.Ceiling((time - StarFirst - StarLife) / StarEvery));
+        for (int k = first; k <= last; k++)
+            if (!starsTaken.Contains(k) && time < StarBorn(k) + StarLife) into.Add(k);
+    }
+
+    readonly List<int> starScratch = new List<int>();
+
+    public int StarAt(int c)
+    {
+        LiveStars(starScratch);
+        foreach (int k in starScratch) if (StarCell(k) == c) return k;
+        return -1;
+    }
+
+    void TakeStar(Player p, int k, int cx, int cy)
+    {
+        starsTaken.Add(k);
+        byte me = (byte)(p.id + 1);
+        int gained = 0;
+        int r = (int)Math.Ceiling(StarRadius);
+        for (int y = cy - r; y <= cy + r; y++)
+            for (int x = cx - r; x <= cx + r; x++)
+            {
+                if (!In(x, y)) continue;
+                float dx = x - cx, dy = y - cy;
+                if (dx * dx + dy * dy > StarRadius * StarRadius) continue;
+                int c = Idx(x, y);
+                if (trail[c] != 0 || owner[c] == me) continue;
+                Take(c, me, true);
+                gained++;
+            }
+        events.Add(new ArenaEvent { kind = ArenaEvent.Kind.Star, player = p.id, count = gained, x = cx + 0.5f, y = cy + 0.5f });
     }
 
     // ------------------------------------------------------------ capture

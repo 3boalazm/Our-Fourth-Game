@@ -468,6 +468,7 @@ public sealed class OurFourthGame : MonoBehaviour
             "everything inside your loop becomes yours - even other players' land.\n\n" +
             "Run into someone's tail to <color=" + UiKit.Hex(Orange) + "><b>cut</b></color> it and send them home. " +
             "Don't cross your own tail, don't hit the wall.\n\n" +
+            "Grab a <color=#FFC21F><b>star</b></color> for a free patch of land around it.\n\n" +
             "When the time is up, the most land <color=" + UiKit.Hex(Blue) + "><b>wins</b></color>.";
         var t = UiKit.Text(card, body, 30, Color.white, new Vector2(0, -10), new Vector2(720, 360), TextAlignmentOptions.Left);
         t.enableAutoSizing = true;
@@ -1314,6 +1315,15 @@ public sealed class OurFourthGame : MonoBehaviour
                     shake = Mathf.Max(shake, Mathf.Min(0.35f, e.count / 300f));
                 }
             }
+            else if (e.kind == ArenaEvent.Kind.Star)
+            {
+                if (mine)
+                {
+                    sfx.Capture(true);
+                    Net.Vibrate(35);
+                    shake = Mathf.Max(shake, 0.25f);
+                }
+            }
             else if (e.kind == ArenaEvent.Kind.Death)
             {
                 if (online && DrivesHere(p))
@@ -1443,6 +1453,7 @@ public sealed class OurFourthGame : MonoBehaviour
         shake = Mathf.Max(0f, shake - dt * 1.8f);
         var jitter = shake > 0f ? (Vector3)(Random.insideUnitCircle * shake) : Vector3.zero;
         cam.transform.position = new Vector3(pos.x, pos.y, -10f) + jitter;
+        view.FitBackdrop(cam);
     }
 
     void UpdateHud(int leader)

@@ -222,6 +222,35 @@ public static class CoreTests
             Check(totalDeaths > 5, "bots also crash sometimes (" + totalDeaths + ")");
         }
 
+        // stars: same places for everyone, grabbing one gives a round patch of land
+        {
+            var a = TwoPlayers();
+            var b = TwoPlayers();
+            Check(a.StarCell(0) == b.StarCell(0) && a.StarCell(3) == b.StarCell(3), "stars are in the same places on every device");
+            a.time = Arena.StarFirst + 0.5f;
+            var live = new List<int>();
+            a.LiveStars(live);
+            Check(live.Count == 1 && live[0] == 0, "the first star is out after StarFirst seconds");
+            int sc = a.StarCell(0);
+            int sx = sc % a.W, sy = sc / a.W;
+            var p = a.players[0];
+            // put the player right next to the star (keep its trail out of the way) and step onto it
+            p.x = sx - 1; p.y = sy; p.dir = 1; p.trail.Clear();
+            int before = p.owned;
+            a.events.Clear();
+            a.Step(p);
+            Check(p.alive && p.x == sx && p.y == sy, "the player reaches the star");
+            Check(p.owned >= before + 15, "the star gives a patch of land (" + (p.owned - before) + " cells)");
+            Check(a.events.Exists(e => e.kind == ArenaEvent.Kind.Star && e.player == 0), "a star event is reported");
+            a.LiveStars(live);
+            Check(!live.Contains(0), "a taken star is gone");
+            Check(a.trail[sc] == 1 || a.owner[sc] == 1, "the star cell itself keeps the trail or is yours");
+            Check(a.Validate() == "", "consistent after a star: " + a.Validate());
+            a.time = Arena.StarBorn(1) + Arena.StarLife + 0.1f;
+            a.LiveStars(live);
+            Check(!live.Contains(1), "stars go away after StarLife seconds");
+        }
+
         Console.WriteLine(failed == 0 ? "all core tests passed" : failed + " FAILED");
         return failed;
     }

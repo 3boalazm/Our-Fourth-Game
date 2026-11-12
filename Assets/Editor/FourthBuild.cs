@@ -133,6 +133,7 @@ public static class FourthBuild
         Directory.CreateDirectory("Preview");
 
         var view = new ArenaView(arenaMat, glow, line);
+        lastView = view;
         var camGo = new GameObject("Cam", typeof(Camera));
         var cam = camGo.GetComponent<Camera>();
         cam.orthographic = true;
@@ -184,12 +185,16 @@ public static class FourthBuild
         if (Application.isBatchMode) EditorApplication.Exit(0);
     }
 
+    static ArenaView lastView;
+    static ArenaView FindView() { return lastView; }
+
     static void Shoot(Camera cam, int w, int h, float orthoSize, string path)
     {
         var rt = new RenderTexture(w, h, 24, RenderTextureFormat.ARGB32);
         cam.targetTexture = rt;
         cam.aspect = w / (float)h;
         cam.orthographicSize = orthoSize;
+        FindView().FitBackdrop(cam);
         cam.Render();
         RenderTexture.active = rt;
         var tex = new Texture2D(w, h, TextureFormat.RGB24, false);

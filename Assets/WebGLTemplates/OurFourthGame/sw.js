@@ -5,7 +5,7 @@
 // an old build); offline you get the last version that was downloaded.
 // Only files from our own origin are cached - the online room relay is never touched.
 
-const CACHE = "color-clash-v2";
+const CACHE = "color-clash-v4";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

@@ -35,9 +35,9 @@ Shader "OurFourth/Arena"
             fixed4 _C1, _C2, _C3, _C4, _Ground, _Ground2;
 
             // how tall the land looks (in cells) and the tail's half width
-            #define DEPTH 0.30
+            #define DEPTH 0.38
             #define RAD 0.34
-            #define TAIL 0.34
+            #define TAIL 0.44
 
             struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; fixed4 color : COLOR; };
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; fixed4 color : COLOR; };
@@ -113,19 +113,78 @@ Shader "OurFourth/Arena"
                 return m;
             }
 
+            float hash21(float2 q) { return frac(sin(dot(q, float2(127.1, 311.7))) * 43758.5453); }
+
+            float sdStar5(float2 q, float r, float rf)
+            {
+                const float2 k1 = float2(0.809016994, -0.587785252);
+                const float2 k2 = float2(-0.809016994, -0.587785252);
+                q.x = abs(q.x);
+                q -= 2.0 * max(dot(k1, q), 0.0) * k1;
+                q -= 2.0 * max(dot(k2, q), 0.0) * k2;
+                q.x = abs(q.x);
+                q.y -= r;
+                float2 ba = rf * float2(-k1.y, k1.x) - float2(0, 1);
+                float h = clamp(dot(q, ba) / dot(ba, ba), 0.0, r);
+                return length(q - ba * h) * sign(q.y * ba.x - q.x * ba.y);
+            }
+
+            float sdTri(float2 q, float r)
+            {
+                const float k = 1.7320508;
+                q.x = abs(q.x) - r;
+                q.y = q.y + r / k;
+                if (q.x + k * q.y > 0.0) q = float2(q.x - k * q.y, -k * q.x - q.y) / 2.0;
+                q.x -= clamp(q.x, -2.0 * r, 0.0);
+                return -length(q) * sign(q.y);
+            }
+
+            float sdBox(float2 q, float2 b)
+            {
+                float2 d = abs(q) - b;
+                return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+            }
+
+            // Decorations on the floor: one shape in each 7x7 block, placed, turned,
+            // sized and coloured by a hash so it is the same on every device.
+            fixed3 Deco(float2 p, fixed3 col)
+            {
+                const float B = 7.0;
+                float2 blk = floor(p / B);
+                float h1 = hash21(blk), h2 = hash21(blk + 17.3), h3 = hash21(blk + 41.9), h4 = hash21(blk + 73.1);
+                if (h4 < 0.18) return col; // some blocks stay empty
+                float2 q = p - (blk + 0.5) * B - (float2(h1, h2) - 0.5) * 2.4;
+                float a = h3 * 6.2831 + _Time.y * 0.15 * (h1 - 0.5);
+                float cs = cos(a), sn = sin(a);
+                q = float2(cs * q.x - sn * q.y, sn * q.x + cs * q.y);
+                float size = lerp(0.9, 1.5, h2);
+                float type = floor(h1 * 5.0);
+                float d;
+                if (type < 0.5) d = sdStar5(q, size, 0.5) - 0.12;
+                else if (type < 1.5) d = abs(length(q) - size * 0.8) - 0.16;
+                else if (type < 2.5) d = sdTri(q, size * 0.75) - 0.12;
+                else if (type < 3.5) d = min(sdBox(q, float2(size, 0.22)), sdBox(q, float2(0.22, size))) - 0.06;
+                else d = min(length(q - float2(-0.6, 0)) - 0.32, min(length(q - float2(0.6, 0)) - 0.32, length(q - float2(0, 0.9)) - 0.32));
+                // some are just an outline
+                if (h3 > 0.55 && type < 2.5) d = abs(d + 0.14) - 0.12;
+                float k = 1.0 - smoothstep(-0.04, 0.04, d);
+                fixed3 tint = palette(1.0 + floor(h4 * 3.999));
+                fixed3 deco = lerp(col, tint, 0.16);
+                deco = lerp(deco, fixed3(1, 1, 1), 0.25 * step(0.6, h2));
+                return lerp(col, deco, k);
+            }
+
             fixed4 frag (v2f i) : SV_Target
             {
                 float2 p = i.uv * _Grid.xy;
                 float2 c = floor(p);
                 float2 f = p - c;
 
-                // ---- ground: soft checkerboard, faint grid, darker near the walls
-                float chk = fmod(c.x + c.y, 2.0);
-                fixed3 col = lerp(_Ground.rgb, _Ground2.rgb, chk);
-                float g = min(min(f.x, 1 - f.x), min(f.y, 1 - f.y));
-                col *= 0.985 + 0.015 * smoothstep(0.0, 0.05, g);
+                // ---- ground: one smooth colour with soft pastel shapes scattered on it
+                fixed3 col = _Ground.rgb;
                 float wall = min(min(p.x, _Grid.x - p.x), min(p.y, _Grid.y - p.y));
-                col *= lerp(0.86, 1.0, smoothstep(0.0, 5.0, wall));
+                col = lerp(_Ground2.rgb, col, smoothstep(0.0, 6.0, wall));
+                col = Deco(p, col);
 
                 // ---- land
                 float e;
@@ -152,7 +211,8 @@ Shader "OurFourth/Arena"
                         fixed3 land = palette(up);
                         float e3;
                         float near = topAt(p + float2(0, DEPTH * 0.45), e3);
-                        col = land * (near > 0.5 ? 0.66 : 0.56);
+                        // the side gets darker towards the floor (y: 0 at the floor, 1 under the top)
+                        col = land * (near > 0.5 ? 0.7 : 0.56);
                     }
                     else
                     {
@@ -182,14 +242,21 @@ Shader "OurFourth/Arena"
                     }
                     float2 d = f - 0.5;
                     float m = skel(d, al, ar, ad, au);
-                    float ms = skel(d + float2(-0.05, 0.10), al, ar, ad, au);
-                    float aa = 0.04;
-                    col *= 1.0 - 0.22 * (1 - smoothstep(TAIL - aa, TAIL + 0.05, ms));
+                    float ms = skel(d + float2(-0.06, 0.16), al, ar, ad, au);
+                    float aa = 0.035;
+                    // soft shadow under the tube
+                    col *= 1.0 - 0.2 * (1 - smoothstep(TAIL - 0.1, TAIL + 0.08, ms));
                     float a = 1 - smoothstep(TAIL - aa, TAIL, m);
-                    fixed3 base = palette(t);
-                    float wave = 0.5 + 0.5 * sin((p.x + p.y) * 2.2 - _Time.y * 9.0);
-                    fixed3 tc = lerp(base, saturate(base * 1.15 + 0.22), 0.25 + 0.45 * wave);
-                    tc = lerp(tc, base * 0.72, smoothstep(TAIL - 0.12, TAIL - 0.03, m));
+                    // a glossy jelly tube: lighter than the land, rounder shading across it,
+                    // a bright streak to the top left and a slow shimmer along it
+                    fixed3 base = lerp(palette(t), fixed3(1, 1, 1), 0.2);
+                    float k = saturate(m / TAIL);
+                    fixed3 tc = base * lerp(1.06, 0.8, k * k);
+                    float hi = skel(d + float2(0.1, -0.12), al, ar, ad, au);
+                    tc = lerp(tc, fixed3(1, 1, 1), (1 - smoothstep(0.02, 0.11, hi)) * 0.55 * step(m, TAIL - 0.08));
+                    float wave = 0.5 + 0.5 * sin((p.x + p.y) * 1.6 - _Time.y * 6.0);
+                    tc = lerp(tc, saturate(tc + 0.1), wave * 0.5);
+                    tc = lerp(tc, palette(t) * 0.7, smoothstep(TAIL - 0.07, TAIL - 0.01, m));
                     col = lerp(col, tc, a);
                 }
 
