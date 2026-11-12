@@ -284,9 +284,11 @@ public sealed class OurFourthGame : MonoBehaviour
 
     void BuildMenu()
     {
-        UiKit.Text(menuPanel, Title(), 110, Color.white, new Vector2(0, -110), new Vector2(1000, 140), TextAlignmentOptions.Center, new Vector2(0.5f, 1f), true, true);
-        UiKit.Text(menuPanel, "Swipe to move  -  leave your land  -  come back to take everything inside", 26, UiKit.Soft,
-            new Vector2(0, -190), new Vector2(1100, 40), TextAlignmentOptions.Center, new Vector2(0.5f, 1f));
+        var menuTitle = UiKit.Text(menuPanel, Title(), 110, Color.white, new Vector2(0, -110), new Vector2(1000, 140), TextAlignmentOptions.Center, new Vector2(0.5f, 1f), true, true);
+        UiKit.Pill(menuTitle, new Color(0.1f, 0.11f, 0.28f, 0.9f), new Vector2(80f, 10f));
+        var menuTip = UiKit.Text(menuPanel, "Swipe to move  -  leave your land  -  come back to take everything inside", 26, Color.white,
+            new Vector2(0, -200), new Vector2(1100, 40), TextAlignmentOptions.Center, new Vector2(0.5f, 1f));
+        UiKit.Pill(menuTip, new Color(0.1f, 0.11f, 0.28f, 0.7f), new Vector2(40f, 12f));
         var card = Card(menuPanel, new Vector2(560, 430), new Vector2(0, -40));
         UiKit.Button(card, "Play vs Bots", Green, new Vector2(0, 140), new Vector2(460, 90), () => SetState(State.Solo), 40);
         UiKit.Button(card, "Create a Room", Pink, new Vector2(0, 38), new Vector2(460, 90), StartHosting, 40);
