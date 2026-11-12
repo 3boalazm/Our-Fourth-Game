@@ -18,12 +18,12 @@ public sealed class ArenaView
     };
     public static readonly Color Night = new Color(0.086f, 0.10f, 0.20f);
     const float HeadSize = 1.3f;
-    // TextMeshPro's ready-made outline material (shared, so texts don't each make a copy)
+    // Not used any more: TMP's SDF outline looked washed out in the web build, texts sit on pills instead.
     public static Material OutlineMaterial;
     static readonly Color Pupil = new Color(0.10f, 0.11f, 0.22f);
 
     readonly Material arenaMat, glowMat, lineMat;
-    readonly Sprite disc, shadedDisc, soft, crownSprite, frameSprite, panelSprite;
+    readonly Sprite disc, shadedDisc, soft, crownSprite, frameSprite, panelSprite, pillSprite, ringSprite;
     public readonly Transform root;
     Arena arena;
     Texture2D cells;
@@ -35,6 +35,7 @@ public sealed class ArenaView
     ParticleSystem burst;
     readonly List<FloatText> floats = new List<FloatText>();
     readonly List<Bokeh> bokeh = new List<Bokeh>();
+    readonly List<Wave> waves = new List<Wave>();
 
     public Texture CellTexture { get { return cells; } }
     public Material ArenaMaterial { get { return arenaMat; } }
@@ -43,7 +44,7 @@ public sealed class ArenaView
     sealed class PlayerView
     {
         public Transform root;
-        public SpriteRenderer head, glow, shine, eyeL, eyeR, pupilL, pupilR, crown;
+        public SpriteRenderer head, glow, shine, eyeL, eyeR, pupilL, pupilR, crown, tag;
         public LineRenderer body;
         public TextMeshPro label;
         public readonly List<Vector3> history = new List<Vector3>();
@@ -53,7 +54,8 @@ public sealed class ArenaView
         public float scale;
     }
 
-    sealed class FloatText { public TextMeshPro text; public float born; public Vector3 from; public bool used; }
+    sealed class FloatText { public TextMeshPro text; public SpriteRenderer bg; public float born; public Vector3 from; public bool used; }
+    sealed class Wave { public SpriteRenderer sr; public float born, life, size; public Color color; public bool used; }
     sealed class Bokeh { public Transform t; public Vector2 norm; public Vector3 home; public float phase, speed; }
 
     public ArenaView(Material arena, Material glow, Material line)
@@ -61,22 +63,14 @@ public sealed class ArenaView
         arenaMat = new Material(arena);
         glowMat = new Material(glow);
         lineMat = new Material(line);
-        if (OutlineMaterial == null)
-        {
-            var preset = Resources.Load<Material>("Fonts & Materials/LiberationSans SDF - Outline");
-            if (preset != null)
-            {
-                OutlineMaterial = new Material(preset);
-                OutlineMaterial.SetFloat("_OutlineWidth", 0.22f);
-                OutlineMaterial.SetColor("_OutlineColor", new Color(0.06f, 0.07f, 0.16f, 1f));
-            }
-        }
         disc = ProcArt.Disc(128, false);
         shadedDisc = ProcArt.Disc(128, true);
         soft = ProcArt.SoftCircle(128);
         crownSprite = ProcArt.Crown(96);
         frameSprite = ProcArt.RoundedRect(64, 18, true, 5);
         panelSprite = ProcArt.RoundedRect(64, 18);
+        pillSprite = ProcArt.RoundedRect(64, 28);
+        ringSprite = ProcArt.Ring(256, 0.035f);
         glowMat.mainTexture = soft.texture;
 
         root = new GameObject("ArenaView").transform;
@@ -101,6 +95,7 @@ public sealed class ArenaView
         for (int i = 0; i < views.Length; i++) views[i] = MakePlayer(i);
         MakeParticles();
         for (int i = 0; i < 8; i++) floats.Add(MakeFloat());
+        for (int i = 0; i < 10; i++) waves.Add(MakeWave());
         MakeBokeh();
     }
 
@@ -129,18 +124,18 @@ public sealed class ArenaView
         v.body.useWorldSpace = true;
         v.body.numCapVertices = 6;
         v.body.numCornerVertices = 4;
-        v.body.widthCurve = new AnimationCurve(new Keyframe(0f, 0.2f), new Keyframe(1f, 0.62f));
+        v.body.widthCurve = new AnimationCurve(new Keyframe(0f, 0.25f), new Keyframe(1f, 0.72f));
         v.body.sortingOrder = 18;
         var grad = new Gradient();
         grad.SetKeys(
-            new[] { new GradientColorKey(Color.Lerp(c, Color.white, 0.35f), 0f), new GradientColorKey(c, 1f) },
-            new[] { new GradientAlphaKey(0.0f, 0f), new GradientAlphaKey(0.95f, 0.35f), new GradientAlphaKey(1f, 1f) });
+            new[] { new GradientColorKey(Color.Lerp(c, Color.black, 0.05f), 0f), new GradientColorKey(Color.Lerp(c, Color.black, 0.22f), 1f) },
+            new[] { new GradientAlphaKey(0.0f, 0f), new GradientAlphaKey(0.9f, 0.4f), new GradientAlphaKey(1f, 1f) });
         v.body.colorGradient = grad;
         v.body.positionCount = 0;
 
         v.glow = MakeSprite("Glow", soft, 15, glowMat, v.root);
         v.glow.color = new Color(c.r, c.g, c.b, 0.45f);
-        v.glow.transform.localScale = Vector3.one * 3.8f;
+        v.glow.transform.localScale = Vector3.one * 3.2f;
 
         // soft shadow and a white ring so the head stands out on its own colour
         var shade = MakeSprite("HeadShadow", soft, 16, null, v.root);
@@ -174,14 +169,18 @@ public sealed class ArenaView
         lg.transform.SetParent(v.root, false);
         v.label = lg.AddComponent<TextMeshPro>();
         v.label.text = "";
-        v.label.fontSize = 4.6f;
+        v.label.fontSize = 4.2f;
+        v.label.fontStyle = FontStyles.Bold;
         v.label.alignment = TextAlignmentOptions.Center;
         v.label.color = Color.white;
-        if (OutlineMaterial != null) v.label.fontSharedMaterial = OutlineMaterial;
         v.label.rectTransform.sizeDelta = new Vector2(8f, 1.4f);
         v.label.sortingOrder = 30;
         v.label.enableWordWrapping = false;
-        v.label.transform.localPosition = new Vector3(0f, 1.5f, 0f);
+        v.label.transform.localPosition = new Vector3(0f, 1.45f, 0f);
+        v.tag = MakeSprite("Tag", pillSprite, 29, null, v.root);
+        v.tag.drawMode = SpriteDrawMode.Sliced;
+        v.tag.color = new Color(0.07f, 0.08f, 0.2f, 0.62f);
+        v.tag.transform.localPosition = new Vector3(0f, 1.45f, 0f);
         v.blinkAt = Random.Range(1f, 4f);
         v.root.gameObject.SetActive(false);
         v.body.enabled = false;
@@ -236,12 +235,36 @@ public sealed class ArenaView
         t.fontSize = 5f;
         t.fontStyle = FontStyles.Bold;
         t.alignment = TextAlignmentOptions.Center;
-        if (OutlineMaterial != null) t.fontSharedMaterial = OutlineMaterial;
+        t.color = Color.white;
         t.rectTransform.sizeDelta = new Vector2(8f, 2f);
         t.sortingOrder = 40;
         t.enableWordWrapping = false;
+        var bg = MakeSprite("Bubble", pillSprite, 39, null, go.transform);
+        bg.drawMode = SpriteDrawMode.Sliced;
         go.SetActive(false);
-        return new FloatText { text = t };
+        return new FloatText { text = t, bg = bg };
+    }
+
+    Wave MakeWave()
+    {
+        var sr = MakeSprite("Wave", ringSprite, 31, null);
+        sr.gameObject.SetActive(false);
+        return new Wave { sr = sr };
+    }
+
+    // An expanding ring (captures, crashes, respawns).
+    void Ring(Vector3 pos, Color c, float size, float life, float realTime)
+    {
+        Wave w = null;
+        foreach (var x in waves) if (!x.used) { w = x; break; }
+        if (w == null) w = waves[0];
+        w.used = true;
+        w.born = realTime;
+        w.life = life;
+        w.size = size;
+        w.color = c;
+        w.sr.transform.localPosition = pos;
+        w.sr.gameObject.SetActive(true);
     }
 
     void MakeBokeh()
@@ -314,6 +337,7 @@ public sealed class ArenaView
             v.body.positionCount = 0;
         }
         foreach (var f in floats) { f.used = false; f.text.gameObject.SetActive(false); }
+        foreach (var w in waves) { w.used = false; w.sr.gameObject.SetActive(false); }
         burst.Clear();
     }
 
@@ -350,11 +374,31 @@ public sealed class ArenaView
                 continue;
             }
             f.text.transform.position = f.from + new Vector3(0f, k * 1.6f, 0f);
+            float fade = 1f - k * k;
             var col = f.text.color;
-            col.a = 1f - k * k;
+            col.a = fade;
             f.text.color = col;
+            var bc = f.bg.color;
+            bc.a = 0.92f * fade;
+            f.bg.color = bc;
             float s = k < 0.15f ? Mathf.Lerp(0.6f, 1.15f, k / 0.15f) : Mathf.Lerp(1.15f, 1f, (k - 0.15f) / 0.85f);
             f.text.transform.localScale = Vector3.one * s;
+        }
+        foreach (var w in waves)
+        {
+            if (!w.used) continue;
+            float k = (realTime - w.born) / w.life;
+            if (k >= 1f)
+            {
+                w.used = false;
+                w.sr.gameObject.SetActive(false);
+                continue;
+            }
+            float ease = 1f - (1f - k) * (1f - k) * (1f - k);
+            w.sr.transform.localScale = Vector3.one * Mathf.Lerp(0.6f, w.size, ease);
+            var wc = w.color;
+            wc.a = (1f - k) * 0.85f;
+            w.sr.color = wc;
         }
     }
 
@@ -415,10 +459,11 @@ public sealed class ArenaView
         var pts = new Vector3[n];
         for (int i = 0; i < v.history.Count; i++) pts[i] = v.history[i];
         pts[n - 1] = pos;
-        v.body.enabled = n >= 2;
+        // out on a tail the shader already draws the band; the body only shows on home land
+        v.body.enabled = n >= 2 && p.trail.Count == 0;
         v.body.positionCount = n;
         v.body.SetPositions(pts);
-        v.body.widthMultiplier = 1.8f * pop;
+        v.body.widthMultiplier = 1.15f * pop;
 
         // eyes look where it goes; blink now and then
         var fwd = new Vector3(Arena.DX[p.dir], Arena.DY[p.dir], 0f);
@@ -437,7 +482,13 @@ public sealed class ArenaView
         gc.a = p.trail.Count > 0 ? pulse + 0.15f : pulse;
         v.glow.color = gc;
 
-        if (v.label.text != p.name) v.label.text = p.name;
+        if (v.label.text != p.name)
+        {
+            v.label.text = p.name;
+            float w = string.IsNullOrEmpty(p.name) ? 0f : v.label.GetPreferredValues(p.name).x;
+            v.tag.enabled = w > 0f;
+            v.tag.size = new Vector2(w + 0.7f, 0.78f);
+        }
         v.crown.enabled = leading && p.owned > 0;
         if (v.crown.enabled)
             v.crown.transform.localPosition = new Vector3(0f, 2.35f + 0.08f * Mathf.Sin(realTime * 4f), 0f);
@@ -463,15 +514,19 @@ public sealed class ArenaView
             Emit(pos, c, count, 0.35f + Mathf.Sqrt(e.count) * 0.08f);
             float share = 100f * e.count / arena.Total;
             if (share >= 0.5f) Float(pos, "+" + share.ToString("0") + "%", c, realTime);
+            Ring(pos, Color.Lerp(c, Color.white, 0.35f), 3f + Mathf.Sqrt(e.count) * 0.9f, 0.7f, realTime);
         }
         else if (e.kind == ArenaEvent.Kind.Death)
         {
             Emit(pos, c, 45, 0.3f);
             Emit(pos, Color.white, 15, 0.2f);
+            Ring(pos, Color.white, 6f, 0.5f, realTime);
+            Ring(pos, c, 4f, 0.65f, realTime);
         }
         else if (e.kind == ArenaEvent.Kind.Respawn)
         {
             Emit(pos, Color.Lerp(c, Color.white, 0.5f), 18, 0.25f);
+            Ring(pos, c, 3.5f, 0.55f, realTime);
         }
     }
 
@@ -492,7 +547,9 @@ public sealed class ArenaView
         f.born = realTime;
         f.from = pos + new Vector3(0f, 0.6f, 0f);
         f.text.text = text;
-        f.text.color = Color.Lerp(c, Color.white, 0.25f);
+        f.text.color = Color.white;
+        f.bg.color = Color.Lerp(c, Color.black, 0.18f);
+        f.bg.size = new Vector2(f.text.GetPreferredValues(text).x + 0.8f, 0.95f);
         f.text.gameObject.SetActive(true);
     }
 }

@@ -183,6 +183,7 @@ public sealed class OurFourthGame : MonoBehaviour
     static readonly Color Blue = ArenaView.Colors[2];
     static readonly Color Orange = ArenaView.Colors[3];
     static readonly Color Grey = new Color(0.36f, 0.39f, 0.55f);
+    static readonly Color PillColor = new Color(0.07f, 0.08f, 0.2f, 0.62f);
 
     string Title()
     {
@@ -233,6 +234,7 @@ public sealed class OurFourthGame : MonoBehaviour
         BuildHow();
 
         toast = UiKit.Text(ct, "", 32, Color.white, new Vector2(0, -120), new Vector2(900, 70), TextAlignmentOptions.Center, new Vector2(0.5f, 1f), true, true);
+        UiKit.Pill(toast, PillColor, new Vector2(48f, 18f));
         toast.gameObject.SetActive(false);
 
         muteButton = UiKit.Button(ct, "", Grey, new Vector2(-80, -46), new Vector2(130, 58), ToggleMute, 26, new Vector2(1f, 1f));
@@ -380,6 +382,7 @@ public sealed class OurFourthGame : MonoBehaviour
         botButton = UiKit.Button(card, "Add a bot", Grey, new Vector2(230, -246), new Vector2(220, 54), ToggleBot, 26);
         startButton = UiKit.Button(lobbyPanel, "Start!", Green, new Vector2(0, 70), new Vector2(340, 90), HostStartMatch, 44, new Vector2(0.5f, 0f));
         lobbyStatus = UiKit.Text(lobbyPanel, "", 28, Color.white, new Vector2(0, 70), new Vector2(900, 50), TextAlignmentOptions.Center, new Vector2(0.5f, 0f), true, true);
+        UiKit.Pill(lobbyStatus, PillColor, new Vector2(40f, 16f));
         UiKit.Button(lobbyPanel, "Leave", Grey, new Vector2(90, 60), new Vector2(150, 64), ToMenu, 30, new Vector2(0f, 0f));
         RefreshChips();
     }
@@ -403,10 +406,15 @@ public sealed class OurFourthGame : MonoBehaviour
             barSegments[i].color = ArenaView.Colors[i];
             barSegments[i].raycastTarget = false;
         }
-        timerText = UiKit.Text(hudPanel, "2:00", 40, Color.white, new Vector2(0, -76), new Vector2(200, 50), TextAlignmentOptions.Center, new Vector2(0.5f, 1f), true, true);
-        myShareText = UiKit.Text(hudPanel, "", 54, Color.white, new Vector2(110, -64), new Vector2(200, 70), TextAlignmentOptions.Center, new Vector2(0f, 1f), true, true);
+        timerText = UiKit.Text(hudPanel, "2:00", 40, Color.white, new Vector2(0, -78), new Vector2(200, 50), TextAlignmentOptions.Center, new Vector2(0.5f, 1f), true, true);
+        UiKit.Pill(timerText, PillColor, new Vector2(36f, 12f));
+        myShareText = UiKit.Text(hudPanel, "", 54, Color.white, new Vector2(120, -64), new Vector2(200, 70), TextAlignmentOptions.Center, new Vector2(0f, 1f), true, true);
+        UiKit.Pill(myShareText, PillColor, new Vector2(40f, 10f));
         for (int i = 0; i < 4; i++)
-            boardLabels[i] = UiKit.Text(hudPanel, "", 24, Color.white, new Vector2(-150, -120 - i * 34), new Vector2(260, 32), TextAlignmentOptions.Right, new Vector2(1f, 1f), true, true);
+        {
+            boardLabels[i] = UiKit.Text(hudPanel, "", 26, Color.white, new Vector2(-160, -122 - i * 42), new Vector2(280, 34), TextAlignmentOptions.Right, new Vector2(1f, 1f), true, true);
+            UiKit.Pill(boardLabels[i], PillColor, new Vector2(28f, 8f));
+        }
         UiKit.Button(hudPanel, "X", Grey, new Vector2(50, -140), new Vector2(64, 64), LeaveMatch, 30, new Vector2(0f, 1f));
 
         // minimap: the same cell texture, drawn by the arena shader
@@ -423,11 +431,13 @@ public sealed class OurFourthGame : MonoBehaviour
             o.effectDistance = new Vector2(2, 2);
         }
         hintText = UiKit.Text(hudPanel, "", 36, Color.white, new Vector2(0, 190), new Vector2(1000, 60), TextAlignmentOptions.Center, new Vector2(0.5f, 0f), true, true);
+        UiKit.Pill(hintText, PillColor, new Vector2(48f, 18f));
     }
 
     void BuildCountdown()
     {
         countText = UiKit.Text(countPanel, "3", 220, Color.white, new Vector2(0, 40), new Vector2(600, 260), TextAlignmentOptions.Center, null, true, true);
+        UiKit.Pill(countText, PillColor, new Vector2(90f, 10f));
     }
 
     void BuildResult()
@@ -479,7 +489,6 @@ public sealed class OurFourthGame : MonoBehaviour
         if (s == State.Menu || s == State.Name || s == State.Solo || s == State.Join || s == State.Lobby)
         {
             if (!demo) StartDemo();
-            sfx.PlayMusic(true);
         }
         if (s == State.Lobby) RefreshLobby();
         RefreshName();
@@ -517,9 +526,23 @@ public sealed class OurFourthGame : MonoBehaviour
             seats[i].used = i <= soloBots;
             seats[i].bot = i > 0;
             seats[i].connected = true;
-            seats[i].name = i == 0 ? myName : BotNames[(i + Random.Range(0, 3)) % BotNames.Length];
+            seats[i].name = i == 0 ? myName : FreeBotName();
         }
         BeginMatch(Random.Range(1, 1000000), Random.Range(1, 1000000), Lengths[lengthIndex]);
+    }
+
+    // A bot name nobody in the seats is using yet.
+    string FreeBotName()
+    {
+        var free = new List<string>();
+        foreach (var n in BotNames)
+        {
+            bool taken = false;
+            foreach (var s in seats) if (s.used && s.name == n) taken = true;
+            if (!taken) free.Add(n);
+        }
+        if (free.Count == 0) return BotNames[Random.Range(0, BotNames.Length)];
+        return free[Random.Range(0, free.Count)];
     }
 
     // ============================================================ rooms
@@ -623,7 +646,7 @@ public sealed class OurFourthGame : MonoBehaviour
                 seats[i].used = true;
                 seats[i].bot = true;
                 seats[i].connected = true;
-                seats[i].name = BotNames[Random.Range(0, BotNames.Length)];
+                seats[i].name = FreeBotName();
                 BroadcastRoster();
                 return;
             }
@@ -1053,7 +1076,6 @@ public sealed class OurFourthGame : MonoBehaviour
         minimap.material = view.ArenaMaterial;
         var me = a.players[mySeat];
         cam.transform.position = new Vector3(me.x + 0.5f, me.y + 0.5f, -10f);
-        sfx.PlayMusic(true);
     }
 
     bool DrivesHere(Player p) { return !p.remote && (!online || p.id == mySeat || (iAmHost && p.bot)); }
@@ -1453,8 +1475,9 @@ public sealed class OurFourthGame : MonoBehaviour
             boardLabels[i].gameObject.SetActive(has);
             if (!has) continue;
             var p = order[i];
-            string crownMark = p.id == leader ? "* " : "";
-            boardLabels[i].text = "<color=" + UiKit.Hex(ArenaView.Colors[p.id]) + ">" + crownMark + p.name + "</color>  " +
+            string rank = "<color=#9aa3c8>" + (i + 1).ToString(Inv) + ".</color> ";
+            string who = p.id == mySeat ? "<b>" + p.name + "</b>" : p.name;
+            boardLabels[i].text = rank + "<color=" + UiKit.Hex(ArenaView.Colors[p.id]) + ">" + who + "</color>  " +
                                   (100f * arena.Share(p)).ToString("0", Inv) + "%";
         }
         // minimap dots

@@ -164,6 +164,21 @@ public static class FourthBuild
             cam.transform.position = new Vector3(lead.x + 0.5f, lead.y + 0.5f, -10f);
             Shoot(cam, 540, 1080, 8.5f / 0.5f, "Preview/close-" + n + "p.png");
             Shoot(cam, 1280, 600, 8.5f, "Preview/landscape-" + n + "p.png");
+            // a moment when somebody is out with a long tail
+            int who = -1;
+            for (int f = 0; f < 60 * 30 && who < 0; f++)
+            {
+                a.Tick(dt, p => true);
+                foreach (var p in a.players) if (p.active && p.alive && p.trail.Count >= 9) who = p.id;
+            }
+            a.events.Clear();
+            if (who >= 0)
+            {
+                view.Render(12f, dt, a.Leader());
+                var tp = a.players[who];
+                cam.transform.position = new Vector3(tp.x + 0.5f, tp.y + 0.5f, -10f);
+                Shoot(cam, 1280, 600, 8.5f, "Preview/trail-" + n + "p.png");
+            }
         }
         Debug.Log("FourthBuild: previews written to ./Preview");
         if (Application.isBatchMode) EditorApplication.Exit(0);

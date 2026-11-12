@@ -115,6 +115,28 @@ public static class UiKit
         return b;
     }
 
+    /// <summary>A dark rounded backdrop behind a text that sits over the arena; it follows the text's size.</summary>
+    public static Image Pill(TextMeshProUGUI text, Color color, Vector2 pad)
+    {
+        var go = new GameObject("Pill", typeof(RectTransform), typeof(Image));
+        var rt = (RectTransform)go.transform;
+        var trt = text.rectTransform;
+        rt.SetParent(trt.parent, false);
+        rt.SetSiblingIndex(trt.GetSiblingIndex());
+        rt.anchorMin = trt.anchorMin;
+        rt.anchorMax = trt.anchorMax;
+        var img = go.GetComponent<Image>();
+        img.sprite = Round;
+        img.type = Image.Type.Sliced;
+        img.color = color;
+        img.raycastTarget = false;
+        var fit = go.AddComponent<TextPill>();
+        fit.text = text;
+        fit.bg = img;
+        fit.pad = pad;
+        return img;
+    }
+
     public static void SetLabel(Button b, string text)
     {
         var t = b.GetComponentInChildren<TextMeshProUGUI>();
@@ -124,5 +146,41 @@ public static class UiKit
     public static string Hex(Color c)
     {
         return "#" + ColorUtility.ToHtmlStringRGB(c);
+    }
+}
+
+/// <summary>Keeps a pill (see UiKit.Pill) the size of its text, and hides it with the text.</summary>
+public sealed class TextPill : MonoBehaviour
+{
+    public TextMeshProUGUI text;
+    public Image bg;
+    public Vector2 pad = new Vector2(32f, 12f);
+    string last;
+    bool lastOn;
+
+    void LateUpdate()
+    {
+        bool on = text != null && text.gameObject.activeInHierarchy && !string.IsNullOrEmpty(text.text);
+        if (bg.enabled != on) bg.enabled = on;
+        if (!on) { lastOn = false; return; }
+        if (lastOn && text.text == last) return;
+        last = text.text;
+        lastOn = true;
+        var trt = text.rectTransform;
+        Vector2 box = trt.rect.size;
+        Vector2 want = text.GetPreferredValues(text.text, box.x, box.y);
+        float w = Mathf.Min(want.x, box.x) + pad.x;
+        float h = Mathf.Min(want.y, box.y) + pad.y;
+        var rt = (RectTransform)transform;
+        rt.sizeDelta = new Vector2(w, h);
+        // line the pill up with the text's alignment
+        float x = trt.anchoredPosition.x;
+        var align = text.alignment;
+        if (align == TextAlignmentOptions.Right || align == TextAlignmentOptions.MidlineRight || align == TextAlignmentOptions.TopRight)
+            x += box.x * 0.5f - w * 0.5f + pad.x * 0.5f;
+        else if (align == TextAlignmentOptions.Left || align == TextAlignmentOptions.MidlineLeft || align == TextAlignmentOptions.TopLeft)
+            x -= box.x * 0.5f - w * 0.5f + pad.x * 0.5f;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(x, trt.anchoredPosition.y);
     }
 }
