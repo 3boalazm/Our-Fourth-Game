@@ -102,6 +102,9 @@ Shader "OurFourth/Arena"
                 fixed3 col = lerp(_Ground.rgb, _Ground2.rgb, chk);
                 float g = min(min(f.x, 1 - f.x), min(f.y, 1 - f.y));
                 col *= 0.985 + 0.015 * smoothstep(0.0, 0.06, g);
+                // land is "raised": it casts a short shadow onto the ground just below it
+                if (o < 0.5 && ownerOf(cellAt(c + float2(0, 1))) > 0.5)
+                    col *= 1.0 - 0.16 * smoothstep(0.35, 1.0, f.y);
 
                 if (o > 0.5)
                 {
@@ -117,6 +120,8 @@ Shader "OurFourth/Arena"
                         // darker rim on the outline, light bevel on top edges, faint diagonal pattern inside
                         float rim = 1 - smoothstep(0.0, 0.16, e);
                         fixed3 shade = lerp(land, land * 0.66, rim);
+                        // thicker, darker bottom edge: the side of the raised tile
+                        if (d < 0.5) shade = lerp(shade, land * 0.55, 1 - smoothstep(0.08, 0.24, f.y));
                         if (u < 0.5) shade = lerp(shade, saturate(land * 1.25 + 0.08), (1 - smoothstep(0.06, 0.2, 1 - f.y)) * 0.55);
                         float stripes = step(0.5, frac((p.x + p.y) * 0.25));
                         shade *= 0.97 + 0.03 * stripes;

@@ -162,7 +162,8 @@ public static class FourthBuild
             // close-up on the leader, like a phone in portrait
             var lead = a.players[a.Leader()];
             cam.transform.position = new Vector3(lead.x + 0.5f, lead.y + 0.5f, -10f);
-            Shoot(cam, 540, 1080, 22f, "Preview/close-" + n + "p.png");
+            Shoot(cam, 540, 1080, 8.5f / 0.5f, "Preview/close-" + n + "p.png");
+            Shoot(cam, 1280, 600, 8.5f, "Preview/landscape-" + n + "p.png");
         }
         Debug.Log("FourthBuild: previews written to ./Preview");
         if (Application.isBatchMode) EditorApplication.Exit(0);

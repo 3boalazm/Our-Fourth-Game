@@ -1363,7 +1363,7 @@ public sealed class OurFourthGame : MonoBehaviour
             var me = arena.players[mySeat];
             var head = view.HeadPosition(me);
             target = new Vector3(head.x, head.y, -10f);
-            size = aspect >= 1f ? 11f : 11f / aspect;
+            size = aspect >= 1f ? 8.5f : 8.5f / aspect;
             size = Mathf.Min(size, arena.H * 0.5f + 4f);
         }
         cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, size, Mathf.Min(1f, dt * 3f));

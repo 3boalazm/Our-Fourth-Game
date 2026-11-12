@@ -53,11 +53,7 @@ public static class UiKit
         t.raycastTarget = false;
         t.richText = true;
         if (bold) t.fontStyle = FontStyles.Bold;
-        if (outline)
-        {
-            t.outlineWidth = 0.22f;
-            t.outlineColor = new Color32(14, 16, 40, 255);
-        }
+        if (outline && ArenaView.OutlineMaterial != null) t.fontSharedMaterial = ArenaView.OutlineMaterial;
         return t;
     }
 
